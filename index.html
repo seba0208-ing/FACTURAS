@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sorteo de Facturas</title>
+  <style>
+    :root {
+      --bg: #121212;
+      --card: #1e1e1e;
+      --primary: #ff9800;
+      --text: #ffffff;
+      --text-muted: #aaaaaa;
+      --danger: #e53935;
+      --success: #43a047;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--text); padding: 16px; display: flex; flex-direction: column; align-items: center; }
+    h1 { font-size: 1.4rem; margin-bottom: 12px; color: var(--primary); text-align: center; }
+    .card { background: var(--card); border-radius: 12px; padding: 14px; width: 100%; max-width: 420px; margin-bottom: 14px; }
+    
+    /* Ruleta */
+    .roulette-container { position: relative; width: 280px; height: 280px; margin: 0 auto 12px; }
+    canvas { width: 100%; height: 100%; border-radius: 50%; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+    .pointer {
+      position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+      width: 0; height: 0; border-left: 12px solid transparent; border-right: 12px solid transparent;
+      border-top: 20px solid #ffffff; z-index: 10;
+    }
+    
+    /* Botones y formularios */
+    button {
+      background: var(--primary); color: #000; border: none; padding: 10px 14px;
+      border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 0.95rem; margin-top: 6px;
+    }
+    button.btn-danger { background: var(--danger); color: #fff; }
+    button.btn-secondary { background: #333; color: #fff; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    input[type="text"] {
+      width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #444;
+      border-radius: 6px; color: #fff; margin-bottom: 6px;
+    }
+    
+    /* Listados */
+    .dupla-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 0; border-bottom: 1px solid #2a2a2a; font-size: 0.9rem;
+    }
+    .dupla-info { display: flex; align-items: center; gap: 8px; }
+    .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
+    .badge-pending { background: #333; color: var(--text-muted); }
+    .badge-done { background: var(--success); color: #fff; }
+    .badge-absent { background: var(--danger); color: #fff; }
+    
+    .history-list { max-height: 140px; overflow-y: auto; font-size: 0.85rem; padding-left: 16px; }
+    .history-list li { margin-bottom: 4px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <h1>Sorteo de Facturas</h1>
+
+  <!-- Sección Ruleta -->
+  <div class="card" style="text-align: center;">
+    <div class="roulette-container">
+      <div class="pointer"></div>
+      <canvas id="wheel" width="500" height="500"></canvas>
+    </div>
+    <button id="spinBtn" onclick="spinWheel()">GIRAR RULETA</button>
+    <div id="winnerDisplay" style="margin-top: 10px; font-weight: bold; color: var(--primary);"></div>
+  </div>
+
+  <!-- Gestión de Parejas -->
+  <div class="card">
+    <h3>Parejas del Ciclo</h3>
+    <div id="duplasContainer" style="margin-top: 8px;"></div>
+    <div style="margin-top: 10px;">
+      <input type="text" id="duplaInput" placeholder="Ej: Juan y Pedro">
+      <button class="btn-secondary" onclick="addDupla()">+ Agregar Pareja</button>
+    </div>
+  </div>
+
+  <!-- Historial y Controles de Ciclo -->
+  <div class="card">
+    <h3>Historial del Ciclo</h3>
+    <ol class="history-list" id="historyList"></ol>
+    <button class="btn-secondary" onclick="undoLastDraw()" style="margin-top: 10px;">Deshacer Último Sorteo</button>
+    <button class="btn-danger" onclick="resetCycle()">Reiniciar Ciclo Completo</button>
+  </div>
+
+  <script>
+    // Estado de la aplicación
+    let state = {
+      duplas: [],    // { id, name, done: bool, absent: bool }
+      history: []    // [{ duplaId, name, date }]
+    };
+
+    // Cargar datos de LocalStorage
+    function loadState() {
+      const saved = localStorage.getItem('sorteo_facturas_data');
+      if (saved) {
+        state = JSON.parse(saved);
+      } else {
+        // Datos de ejemplo iniciales
+        state.duplas = [
+          { id: 1, name: "Grupo 1: Lucas y Martín", done: false, absent: false },
+          { id: 2, name: "Grupo 2: Sofía y Ana", done: false, absent: false },
+          { id: 3, name: "Grupo 3: Carlos y Diego", done: false, absent: false }
+        ];
+      }
+      renderDuplas();
+      renderHistory();
+      drawWheel();
+    }
+
+    function saveState() {
+      localStorage.setItem('sorteo_facturas_data', JSON.stringify(state));
+    }
+
+    // Agregar nueva pareja
+    function addDupla() {
+      const input = document.getElementById('duplaInput');
+      const val = input.value.trim();
+      if (!val) return;
+      state.duplas.push({
+        id: Date.now(),
+        name: val,
+        done: false,
+        absent: false
+      });
+      input.value = '';
+      saveState();
+      renderDuplas();
+      drawWheel();
+    }
+
+    // Alternar ausencia
+    function toggleAbsent(id) {
+      const d = state.duplas.find(item => item.id === id);
+      if (d) {
+        d.absent = !d.absent;
+        saveState();
+        renderDuplas();
+        drawWheel();
+      }
+    }
+
+    // Dibujar la ruleta en el Canvas
+    const canvas = document.getElementById('wheel');
+    const ctx = canvas.getContext('2d');
+    let currentAngle = 0;
+    let isSpinning = false;
+
+    function getEligibleDuplas() {
+      return state.duplas.filter(d => !d.done && !d.absent);
+    }
+
+    function drawWheel() {
+      const eligible = getEligibleDuplas();
+      const total = eligible.length;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (total === 0) {
+        ctx.fillStyle = "#333";
+        ctx.beginPath();
+        ctx.arc(250, 250, 240, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = "#fff";
+        ctx.font = "20px sans-serif";
+        ctx.textAlign = "center";
+        const msg = state.duplas.every(d => d.done) ? "¡Ciclo completado!" : "Sin parejas activas";
+        ctx.fillText(msg, 250, 255);
+        return;
+      }
+
+      const arc = (2 * Math.PI) / total;
+      const colors = ['#f44336', '#e91e63', '#9c27b0', '#3f51b5', '#03a9f4', '#009688', '#8bc34a', '#ff9800'];
+
+      eligible.forEach((dupla, i) => {
+        const angle = currentAngle + i * arc;
+        ctx.fillStyle = colors[i % colors.length];
+        ctx.beginPath();
+        ctx.moveTo(250, 250);
+        ctx.arc(250, 250, 240, angle, angle + arc);
+        ctx.lineTo(250, 250);
+        ctx.fill();
+        ctx.stroke();
+
+        // Texto
+        ctx.save();
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 18px sans-serif";
+        ctx.translate(250, 250);
+        ctx.rotate(angle + arc / 2);
+        ctx.textAlign = "right";
+        ctx.fillText(dupla.name, 220, 6);
+        ctx.restore();
+      });
+    }
+
+    // Girar Ruleta con animación
+    function spinWheel() {
+      const eligible = getEligibleDuplas();
+      if (eligible.length === 0 || isSpinning) return;
+
+      isSpinning = true;
+      document.getElementById('spinBtn').disabled = true;
+      document.getElementById('winnerDisplay').innerText = "Girando...";
+
+      const winningIndex = Math.floor(Math.random() * eligible.length);
+      const total = eligible.length;
+      const arc = (2 * Math.PI) / total;
+
+      // Calcular ángulo exacto para que el puntero (arriba: 3*PI/2) coincida con la porción
+      const spinRounds = 5 + Math.floor(Math.random() * 3);
+      const targetSliceCenter = winningIndex * arc + arc / 2;
+      const targetAngle = (1.5 * Math.PI) - targetSliceCenter + (spinRounds * 2 * Math.PI);
+
+      const duration = 4000;
+      const start = performance.now();
+      const initialAngle = currentAngle % (2 * Math.PI);
+
+      function animate(time) {
+        const elapsed = time - start;
+        const progress = Math.min(elapsed / duration, 1);
+        // Easing out cubic
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+
+        currentAngle = initialAngle + (targetAngle - initialAngle) * easeOut;
+        drawWheel();
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          isSpinning = false;
+          document.getElementById('spinBtn').disabled = false;
+          const winner = eligible[winningIndex];
+          winner.done = true;
+          state.history.push({
+            duplaId: winner.id,
+            name: winner.name,
+            date: new Date().toLocaleDateString('es-AR')
+          });
+          saveState();
+          renderDuplas();
+          renderHistory();
+          drawWheel();
+          document.getElementById('winnerDisplay').innerText = `¡Le toca a: ${winner.name}!`;
+        }
+      }
+      requestAnimationFrame(animate);
+    }
+
+    // Renderizar listado de duplas
+    function renderDuplas() {
+      const cont = document.getElementById('duplasContainer');
+      cont.innerHTML = '';
+      state.duplas.forEach(d => {
+        const div = document.createElement('div');
+        div.className = 'dupla-item';
+
+        let badge = '<span class="badge badge-pending">Pendiente</span>';
+        if (d.done) badge = '<span class="badge badge-done">Completó</span>';
+        else if (d.absent) badge = '<span class="badge badge-absent">Ausente</span>';
+
+        div.innerHTML = `
+          <div class="dupla-info">
+            <span>${d.name}</span>
+            ${badge}
+          </div>
+          <div>
+            <button class="btn-secondary" style="width: auto; padding: 4px 8px; font-size: 0.75rem;" 
+              onclick="toggleAbsent(${d.id})" ${d.done ? 'disabled' : ''}>
+              ${d.absent ? 'Habilitar' : 'Faltó'}
+            </button>
+          </div>
+        `;
+        cont.appendChild(div);
+      });
+    }
+
+    // Renderizar historial
+    function renderHistory() {
+      const list = document.getElementById('historyList');
+      list.innerHTML = '';
+      state.history.forEach(h => {
+        const li = document.createElement('li');
+        li.innerText = `${h.date} - ${h.name}`;
+        list.appendChild(li);
+      });
+    }
+
+    // Deshacer último sorteo
+    function undoLastDraw() {
+      if (state.history.length === 0) {
+        alert("No hay sorteos en el historial para deshacer.");
+        return;
+      }
+      const last = state.history.pop();
+      const d = state.duplas.find(item => item.id === last.duplaId);
+      if (d) d.done = false;
+      saveState();
+      renderDuplas();
+      renderHistory();
+      drawWheel();
+      document.getElementById('winnerDisplay').innerText = `Se anuló el sorteo de: ${last.name}`;
+    }
+
+    // Reiniciar ciclo completo con doble verificación
+    function resetCycle() {
+      const firstCheck = confirm("¿Estás seguro de que querés reiniciar el ciclo de facturas?");
+      if (!firstCheck) return;
+
+      const secondCheck = confirm("¡Atención! Esto borrará el historial de este ciclo y volverá a habilitar a todos. ¿Confirmás?");
+      if (!secondCheck) return;
+
+      state.duplas.forEach(d => {
+        d.done = false;
+        d.absent = false;
+      });
+      state.history = [];
+      saveState();
+      renderDuplas();
+      renderHistory();
+      drawWheel();
+      document.getElementById('winnerDisplay').innerText = "Ciclo reiniciado.";
+    }
+
+    window.onload = loadState;
+  </script>
+</body>
+  </html>
+  
