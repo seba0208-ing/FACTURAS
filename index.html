@@ -13,11 +13,12 @@
       --text-muted: #aaaaaa;
       --danger: #e53935;
       --success: #43a047;
+      --blue: #1e88e5;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: var(--bg); color: var(--text); padding: 16px; display: flex; flex-direction: column; align-items: center; }
     h1 { font-size: 1.4rem; margin-bottom: 12px; color: var(--primary); text-align: center; }
-    .card { background: var(--card); border-radius: 12px; padding: 14px; width: 100%; max-width: 420px; margin-bottom: 14px; }
+    .card { background: var(--card); border-radius: 12px; padding: 14px; width: 100%; max-width: 440px; margin-bottom: 14px; }
     
     /* Ruleta */
     .roulette-container { position: relative; width: 280px; height: 280px; margin: 0 auto 12px; }
@@ -30,23 +31,27 @@
     
     /* Botones y formularios */
     button {
-      background: var(--primary); color: #000; border: none; padding: 10px 14px;
-      border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 0.95rem; margin-top: 6px;
+      background: var(--primary); color: #000; border: none; padding: 8px 12px;
+      border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.9rem;
     }
+    button.btn-main { width: 100%; padding: 12px; font-size: 1rem; margin-top: 6px; }
     button.btn-danger { background: var(--danger); color: #fff; }
+    button.btn-blue { background: var(--blue); color: #fff; }
     button.btn-secondary { background: #333; color: #fff; }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button:disabled { opacity: 0.35; cursor: not-allowed; }
+    
     input[type="text"] {
       width: 100%; padding: 10px; background: #2a2a2a; border: 1px solid #444;
-      border-radius: 6px; color: #fff; margin-bottom: 6px;
+      border-radius: 6px; color: #fff; font-size: 0.95rem; margin-bottom: 8px;
     }
     
-    /* Listados */
+    /* Listado de duplas */
     .dupla-item {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 8px 0; border-bottom: 1px solid #2a2a2a; font-size: 0.9rem;
+      display: flex; flex-direction: column; gap: 6px;
+      padding: 10px 0; border-bottom: 1px solid #2a2a2a;
     }
-    .dupla-info { display: flex; align-items: center; gap: 8px; }
+    .dupla-header { display: flex; justify-content: space-between; align-items: center; }
+    .dupla-actions { display: flex; gap: 6px; }
     .badge { padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
     .badge-pending { background: #333; color: var(--text-muted); }
     .badge-done { background: var(--success); color: #fff; }
@@ -66,47 +71,43 @@
       <div class="pointer"></div>
       <canvas id="wheel" width="500" height="500"></canvas>
     </div>
-    <button id="spinBtn" onclick="spinWheel()">GIRAR RULETA</button>
-    <div id="winnerDisplay" style="margin-top: 10px; font-weight: bold; color: var(--primary);"></div>
+    <button id="spinBtn" class="btn-main" onclick="spinWheel()">GIRAR RULETA</button>
+    <div id="winnerDisplay" style="margin-top: 10px; font-weight: bold; color: var(--primary); font-size: 1.1rem;"></div>
   </div>
 
   <!-- Gestión de Parejas -->
   <div class="card">
     <h3>Parejas del Ciclo</h3>
     <div id="duplasContainer" style="margin-top: 8px;"></div>
-    <div style="margin-top: 10px;">
-      <input type="text" id="duplaInput" placeholder="Ej: Juan y Pedro">
-      <button class="btn-secondary" onclick="addDupla()">+ Agregar Pareja</button>
+    
+    <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 6px;">
+      <input type="text" id="duplaInput" placeholder="Ej: Juan y Martín">
+      <button class="btn-secondary" style="width: 100%;" onclick="addDupla()">+ Agregar Pareja</button>
     </div>
   </div>
 
   <!-- Historial y Controles de Ciclo -->
   <div class="card">
     <h3>Historial del Ciclo</h3>
-    <ol class="history-list" id="historyList"></ol>
-    <button class="btn-secondary" onclick="undoLastDraw()" style="margin-top: 10px;">Deshacer Último Sorteo</button>
-    <button class="btn-danger" onclick="resetCycle()">Reiniciar Ciclo Completo</button>
+    <ol class="history-list" id="historyList" style="margin-top: 8px;"></ol>
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+      <button class="btn-secondary" style="width: 100%;" onclick="undoLastDraw()">Deshacer Último Sorteo</button>
+      <button class="btn-danger" style="width: 100%;" onclick="resetCycle()">Reiniciar Ciclo Completo</button>
+    </div>
   </div>
 
   <script>
-    // Estado de la aplicación
     let state = {
-      duplas: [],    // { id, name, done: bool, absent: bool }
-      history: []    // [{ duplaId, name, date }]
+      duplas: [],
+      history: []
     };
 
-    // Cargar datos de LocalStorage
     function loadState() {
       const saved = localStorage.getItem('sorteo_facturas_data');
       if (saved) {
         state = JSON.parse(saved);
       } else {
-        // Datos de ejemplo iniciales
-        state.duplas = [
-          { id: 1, name: "Grupo 1: Lucas y Martín", done: false, absent: false },
-          { id: 2, name: "Grupo 2: Sofía y Ana", done: false, absent: false },
-          { id: 3, name: "Grupo 3: Carlos y Diego", done: false, absent: false }
-        ];
+        state.duplas = [];
       }
       renderDuplas();
       renderHistory();
@@ -117,7 +118,6 @@
       localStorage.setItem('sorteo_facturas_data', JSON.stringify(state));
     }
 
-    // Agregar nueva pareja
     function addDupla() {
       const input = document.getElementById('duplaInput');
       const val = input.value.trim();
@@ -134,7 +134,31 @@
       drawWheel();
     }
 
-    // Alternar ausencia
+    function editDupla(id) {
+      const d = state.duplas.find(item => item.id === id);
+      if (!d) return;
+      const nuevoNombre = prompt("Editar nombre de la pareja:", d.name);
+      if (nuevoNombre !== null && nuevoNombre.trim() !== "") {
+        d.name = nuevoNombre.trim();
+        saveState();
+        renderDuplas();
+        drawWheel();
+      }
+    }
+
+    function deleteDupla(id) {
+      const d = state.duplas.find(item => item.id === id);
+      if (!d) return;
+      if (confirm(`¿Eliminar definitivamente a "${d.name}"?`)) {
+        state.duplas = state.duplas.filter(item => item.id !== id);
+        state.history = state.history.filter(item => item.duplaId !== id);
+        saveState();
+        renderDuplas();
+        renderHistory();
+        drawWheel();
+      }
+    }
+
     function toggleAbsent(id) {
       const d = state.duplas.find(item => item.id === id);
       if (d) {
@@ -145,7 +169,6 @@
       }
     }
 
-    // Dibujar la ruleta en el Canvas
     const canvas = document.getElementById('wheel');
     const ctx = canvas.getContext('2d');
     let currentAngle = 0;
@@ -161,14 +184,16 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       if (total === 0) {
-        ctx.fillStyle = "#333";
+        ctx.fillStyle = "#2a2a2a";
         ctx.beginPath();
         ctx.arc(250, 250, 240, 0, 2 * Math.PI);
         ctx.fill();
         ctx.fillStyle = "#fff";
-        ctx.font = "20px sans-serif";
+        ctx.font = "bold 20px sans-serif";
         ctx.textAlign = "center";
-        const msg = state.duplas.every(d => d.done) ? "¡Ciclo completado!" : "Sin parejas activas";
+        const msg = state.duplas.length === 0 
+          ? "Agregá parejas abajo" 
+          : (state.duplas.every(d => d.done) ? "¡Ciclo completado!" : "Sin parejas activas");
         ctx.fillText(msg, 250, 255);
         return;
       }
@@ -186,7 +211,6 @@
         ctx.fill();
         ctx.stroke();
 
-        // Texto
         ctx.save();
         ctx.fillStyle = "#fff";
         ctx.font = "bold 18px sans-serif";
@@ -198,7 +222,6 @@
       });
     }
 
-    // Girar Ruleta con animación
     function spinWheel() {
       const eligible = getEligibleDuplas();
       if (eligible.length === 0 || isSpinning) return;
@@ -211,7 +234,6 @@
       const total = eligible.length;
       const arc = (2 * Math.PI) / total;
 
-      // Calcular ángulo exacto para que el puntero (arriba: 3*PI/2) coincida con la porción
       const spinRounds = 5 + Math.floor(Math.random() * 3);
       const targetSliceCenter = winningIndex * arc + arc / 2;
       const targetAngle = (1.5 * Math.PI) - targetSliceCenter + (spinRounds * 2 * Math.PI);
@@ -223,7 +245,6 @@
       function animate(time) {
         const elapsed = time - start;
         const progress = Math.min(elapsed / duration, 1);
-        // Easing out cubic
         const easeOut = 1 - Math.pow(1 - progress, 3);
 
         currentAngle = initialAngle + (targetAngle - initialAngle) * easeOut;
@@ -251,10 +272,15 @@
       requestAnimationFrame(animate);
     }
 
-    // Renderizar listado de duplas
     function renderDuplas() {
       const cont = document.getElementById('duplasContainer');
       cont.innerHTML = '';
+
+      if (state.duplas.length === 0) {
+        cont.innerHTML = '<p style="color: var(--text-muted); font-size: 0.85rem;">No hay parejas cargadas aún.</p>';
+        return;
+      }
+
       state.duplas.forEach(d => {
         const div = document.createElement('div');
         div.className = 'dupla-item';
@@ -264,25 +290,29 @@
         else if (d.absent) badge = '<span class="badge badge-absent">Ausente</span>';
 
         div.innerHTML = `
-          <div class="dupla-info">
-            <span>${d.name}</span>
+          <div class="dupla-header">
+            <strong>${d.name}</strong>
             ${badge}
           </div>
-          <div>
-            <button class="btn-secondary" style="width: auto; padding: 4px 8px; font-size: 0.75rem;" 
-              onclick="toggleAbsent(${d.id})" ${d.done ? 'disabled' : ''}>
+          <div class="dupla-actions">
+            <button class="btn-blue" style="font-size: 0.75rem; padding: 4px 8px;" onclick="editDupla(${d.id})">Editar</button>
+            <button class="btn-secondary" style="font-size: 0.75rem; padding: 4px 8px;" onclick="toggleAbsent(${d.id})" ${d.done ? 'disabled' : ''}>
               ${d.absent ? 'Habilitar' : 'Faltó'}
             </button>
+            <button class="btn-danger" style="font-size: 0.75rem; padding: 4px 8px;" onclick="deleteDupla(${d.id})">Eliminar</button>
           </div>
         `;
         cont.appendChild(div);
       });
     }
 
-    // Renderizar historial
     function renderHistory() {
       const list = document.getElementById('historyList');
       list.innerHTML = '';
+      if (state.history.length === 0) {
+        list.innerHTML = '<li style="list-style: none; margin-left: -16px;">Sin sorteos previos.</li>';
+        return;
+      }
       state.history.forEach(h => {
         const li = document.createElement('li');
         li.innerText = `${h.date} - ${h.name}`;
@@ -290,7 +320,6 @@
       });
     }
 
-    // Deshacer último sorteo
     function undoLastDraw() {
       if (state.history.length === 0) {
         alert("No hay sorteos en el historial para deshacer.");
@@ -306,12 +335,11 @@
       document.getElementById('winnerDisplay').innerText = `Se anuló el sorteo de: ${last.name}`;
     }
 
-    // Reiniciar ciclo completo con doble verificación
     function resetCycle() {
       const firstCheck = confirm("¿Estás seguro de que querés reiniciar el ciclo de facturas?");
       if (!firstCheck) return;
 
-      const secondCheck = confirm("¡Atención! Esto borrará el historial de este ciclo y volverá a habilitar a todos. ¿Confirmás?");
+      const secondCheck = confirm("¡Atención! Esto volverá a habilitar a todas las parejas para el sorteo. ¿Confirmás?");
       if (!secondCheck) return;
 
       state.duplas.forEach(d => {
@@ -329,5 +357,4 @@
     window.onload = loadState;
   </script>
 </body>
-  </html>
-  
+</html>
